@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fake Shop Scanner</title>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --pink:#E8629E;--pink-d:#C0427A;--pink-bg:#FDF0F5;--pink-b:#FAD4E7;
+  --blue:#4A8FE8;--blue-d:#2563C4;--blue-bg:#EEF5FC;--blue-b:#C8DEFA;
+  --green:#3DB85A;--green-d:#237A38;--green-bg:#EDF8F0;--green-b:#C2EACB;
+  --amber:#E8A625;--amber-d:#9D6A08;--amber-bg:#FEF5E6;--amber-b:#FBDFA3;
+  --red-bg:#FEECEC;--red-b:#FACACA;--red-d:#A32D2D;
+  --surface:#F7F4F8;--border:rgba(0,0,0,.08);--border-md:rgba(0,0,0,.14);
+  --tx:#1E1C24;--tx2:#6B6870;--txh:#A09DAA;
+}
+body{font-family:'Sarabun',sans-serif;background:var(--surface);color:var(--tx);min-height:100vh;font-size:15px}
+.topbar{background:#fff;border-bottom:1px solid var(--border);padding:0 1.5rem;height:60px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;gap:8px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.brand-icon{width:32px;height:32px;background:linear-gradient(135deg,var(--pink),var(--blue));border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px}
+.brand-name{font-size:16px;font-weight:700;letter-spacing:-.3px}
+.brand-sub{font-size:11px;color:var(--txh);text-transform:uppercase;letter-spacing:.5px}
+.topbar-right{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.sync-badge{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:20px;font-size:12px;font-weight:600}
+.sync-ok{background:var(--green-bg);color:var(--green-d);border:1px solid var(--green-b)}
+.sync-err{background:var(--red-bg);color:var(--red-d);border:1px solid var(--red-b)}
+.sync-dot{width:7px;height:7px;border-radius:50%}
+.sync-ok .sync-dot{background:var(--green);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.apibar{background:#fff3cd;border-bottom:1px solid #ffc107;padding:8px 1.5rem;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px}
+.apibar label{font-weight:600;color:#856404;white-space:nowrap}
+.apibar input{flex:1;min-width:200px;padding:7px 12px;border:1.5px solid var(--border-md);border-radius:8px;font-family:inherit;font-size:13px;outline:none}
+.apibar input:focus{border-color:var(--pink)}
+.apibar .hint{color:#856404;font-size:12px}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:8px;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;border:1.5px solid var(--border-md);background:#fff;color:var(--tx);transition:all .15s;white-space:nowrap}
+.btn:hover{background:var(--surface)}.btn:active{transform:scale(.97)}.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-pink{background:var(--pink);color:#fff;border-color:var(--pink)}.btn-pink:hover{background:var(--pink-d)}
+.btn-green{background:var(--green-bg);color:var(--green-d);border-color:var(--green-b)}
+.btn-danger{background:var(--red-bg);color:var(--red-d);border-color:var(--red-b)}
+.main{max-width:1300px;margin:0 auto;padding:2rem}
+.sec{font-size:12px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--txh);margin:2rem 0 1rem}
+.sec:first-child{margin-top:0}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px}
+.stat-card{background:#fff;border-radius:16px;padding:1.25rem 1.5rem;border:1px solid var(--border);position:relative;overflow:hidden}
+.stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px}
+.sc-pink::before{background:linear-gradient(90deg,var(--pink),var(--pink-b))}
+.sc-blue::before{background:linear-gradient(90deg,var(--blue),var(--blue-b))}
+.sc-green::before{background:linear-gradient(90deg,var(--green),var(--green-b))}
+.sc-amber::before{background:linear-gradient(90deg,var(--amber),var(--amber-b))}
+.stat-label{font-size:12px;color:var(--txh);font-weight:500;margin-bottom:6px}
+.stat-value{font-size:32px;font-weight:700;letter-spacing:-1px;line-height:1;font-family:monospace}
+.sc-pink .stat-value{color:var(--pink-d)}.sc-blue .stat-value{color:var(--blue-d)}
+.sc-green .stat-value{color:var(--green-d)}.sc-amber .stat-value{color:var(--amber-d)}
+.stat-sub{font-size:12px;color:var(--txh);margin-top:6px}
+.charts-row{display:grid;grid-template-columns:300px 1fr;gap:14px}
+.card{background:#fff;border-radius:16px;border:1px solid var(--border);padding:1.5rem}
+.card-title{font-size:14px;font-weight:600;margin-bottom:1rem}
+.pie-wrap{height:180px;display:flex;align-items:center;justify-content:center}
+.legend{display:flex;flex-direction:column;gap:8px;margin-top:1rem}
+.leg-item{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--tx2)}
+.leg-dot{width:10px;height:10px;border-radius:3px;flex-shrink:0}
+.leg-val{font-weight:600;font-family:monospace;color:var(--tx);margin-left:auto}
+.upload-zone{border-radius:12px;border:2px dashed var(--pink-b);padding:1.5rem;text-align:center;cursor:pointer;transition:all .2s;min-height:120px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px}
+.upload-zone:hover,.upload-zone.over{border-color:var(--pink);background:var(--pink-bg)}
+.preview-grid{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;justify-content:center}
+.thumb{position:relative;width:60px;height:60px;border-radius:8px;overflow:hidden;border:1.5px solid var(--border-md)}
+.thumb img{width:100%;height:100%;object-fit:cover}
+.rm{position:absolute;top:2px;right:2px;width:16px;height:16px;border-radius:50%;background:rgba(0,0,0,.65);color:#fff;border:none;cursor:pointer;font-size:9px;display:flex;align-items:center;justify-content:center}
+.ai-bar{display:none;align-items:center;gap:8px;margin-top:10px;padding:10px 14px;background:var(--blue-bg);border-radius:8px;font-size:13px;color:var(--blue-d)}
+.spinner{width:14px;height:14px;border:2px solid var(--blue-b);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+.upload-btn-row{margin-top:12px;display:flex;justify-content:center}
+.table-card{background:#fff;border-radius:16px;border:1px solid var(--border);overflow:hidden}
+.toolbar{padding:1rem 1.5rem;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.sw{position:relative;flex:1;min-width:200px}
+.sw span{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--txh);pointer-events:none}
+.sinput{width:100%;padding:8px 10px 8px 32px;border:1.5px solid var(--border-md);border-radius:8px;font-family:inherit;font-size:14px;outline:none;background:#F8F8F7;color:var(--tx)}
+.sinput:focus{border-color:var(--pink);background:#fff}
+.fsel{padding:8px 28px 8px 10px;border:1.5px solid var(--border-md);border-radius:8px;font-family:inherit;font-size:14px;color:var(--tx);background:#F8F8F7;outline:none;appearance:none;cursor:pointer;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23A09DAA' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 8px center}
+.twrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+thead th{padding:10px 12px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--txh);background:#F8F8F7;border-bottom:1px solid var(--border);white-space:nowrap}
+tbody tr{border-bottom:1px solid rgba(0,0,0,.06);transition:background .1s;cursor:pointer}
+tbody tr:last-child{border-bottom:none}
+tbody tr:hover{background:var(--pink-bg)}
+tbody td{padding:8px 12px;color:var(--tx);vertical-align:middle;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.shop-pill{display:inline-block;background:var(--pink-bg);color:var(--pink-d);border-radius:20px;padding:2px 8px;font-size:11px;font-weight:600;font-family:monospace;border:1px solid var(--pink-b);max-width:160px;overflow:hidden;text-overflow:ellipsis;vertical-align:middle}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600;white-space:nowrap}
+.b-ok{background:var(--green-bg);color:var(--green-d);border:1px solid var(--green-b)}
+.b-no{background:var(--amber-bg);color:var(--amber-d);border:1px solid var(--amber-b)}
+.bdot{width:6px;height:6px;border-radius:50%}
+.b-ok .bdot{background:var(--green)}.b-no .bdot{background:var(--amber)}
+.empty{padding:3.5rem;text-align:center;color:var(--txh)}
+.tfoot{padding:10px 16px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;font-size:13px;color:var(--tx2);background:#F8F8F7}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;padding:1rem}
+.modal-overlay.open{display:flex}
+.modal-box{background:#fff;border-radius:20px;width:100%;max-width:540px;box-shadow:0 20px 60px rgba(0,0,0,.2);overflow:hidden;animation:slideUp .2s ease}
+@keyframes slideUp{from{transform:translateY(16px);opacity:0}to{transform:translateY(0);opacity:1}}
+.modal-head{padding:1.25rem 1.5rem;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
+.modal-body{padding:1.5rem;display:flex;flex-direction:column;gap:12px;max-height:70vh;overflow-y:auto}
+.modal-foot{padding:1rem 1.5rem;border-top:1px solid var(--border);display:flex;justify-content:flex-end;background:#F8F8F7}
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.info-box{border-radius:12px;padding:12px}
+.info-label{font-size:11px;color:var(--txh);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.info-val{font-family:monospace;font-size:12px;font-weight:600;word-break:break-all;line-height:1.5}
+.modal-img{width:100%;max-height:220px;object-fit:contain;display:block;background:#F7F4F8;border-radius:8px;cursor:zoom-in}
+.lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:2000;align-items:center;justify-content:center;cursor:zoom-out}
+.lightbox.open{display:flex}
+.lightbox img{max-width:92vw;max-height:92vh;border-radius:10px;object-fit:contain;box-shadow:0 8px 40px rgba(0,0,0,.6);cursor:default;transition:transform .2s}
+.lb-close{position:fixed;top:18px;right:22px;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.15);color:#fff;border:none;cursor:pointer;font-size:20px;display:flex;align-items:center;justify-content:center;z-index:2001}
+.lb-close:hover{background:rgba(255,255,255,.3)}
+.lb-hint{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,.45);font-size:13px;pointer-events:none;z-index:2001}
+.toast{position:fixed;bottom:24px;right:24px;padding:12px 20px;border-radius:12px;font-size:14px;color:#fff;box-shadow:0 4px 12px rgba(0,0,0,.2);transform:translateY(80px);opacity:0;transition:all .3s;z-index:9999;max-width:340px;line-height:1.4;pointer-events:none}
+.toast.show{transform:translateY(0);opacity:1}
+.t-ok{background:var(--green-d)}.t-err{background:var(--red-d)}
+.shop-pill-edit{display:inline-block;background:var(--pink-bg);color:var(--pink-d);border-radius:20px;padding:2px 8px;font-size:11px;font-weight:600;font-family:monospace;border:1px dashed var(--pink-d);max-width:160px;overflow:hidden;text-overflow:ellipsis;vertical-align:middle;cursor:text;outline:none;min-width:60px}
+.shop-pill-edit:focus{background:#fff;border-color:var(--pink);box-shadow:0 0 0 2px var(--pink-b)}
+.edit-hint{font-size:10px;color:var(--txh);margin-top:2px;display:none}
+tr:hover .edit-hint{display:block}
+@media(max-width:900px){.charts-row{grid-template-columns:1fr}}
+@media(max-width:600px){.main{padding:1rem}.stats-grid{grid-template-columns:1fr 1fr}.topbar{height:auto;padding:.75rem 1rem}}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="brand-icon">🔍</div>
+    <div>
+      <div class="brand-name">Fake Shop Scanner</div>
+      <div class="brand-sub">Dashboard ผลการปิดร้านปลอม</div>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <span class="sync-badge sync-err" id="syncBadge"><span class="sync-dot" id="syncDot"></span><span id="syncTxt">กำลังเชื่อมต่อ...</span></span>
+    <button class="btn btn-green" onclick="exportExcel()">📥 Excel</button>
+    <button class="btn btn-danger" onclick="clearAll()">🗑 ล้างทั้งหมด</button>
+  </div>
+</div>
+
+<div class="apibar">
+  <label>🔑 Anthropic API Key:</label>
+  <input type="password" id="apiKey" placeholder="sk-ant-api03-..." autocomplete="off"
+    oninput="try{localStorage.setItem('fss_key',this.value)}catch(e){}">
+  <button class="btn" style="padding:6px 10px" onclick="(function(){var el=document.getElementById('apiKey');el.type=el.type==='password'?'text':'password'})()">👁</button>
+  <span class="hint">Key เก็บในเครื่องคุณเท่านั้น</span>
+</div>
+
+<div class="main">
+  <div class="sec">ภาพรวม</div>
+  <div class="stats-grid">
+    <div class="stat-card sc-pink"><div class="stat-label">🏪 ร้านปลอมทั้งหมด</div><div class="stat-value" id="sShops">0</div><div class="stat-sub">Shop ID ที่ไม่ซ้ำกัน</div></div>
+    <div class="stat-card sc-blue"><div class="stat-label">🛒 ตะกร้าทั้งหมด</div><div class="stat-value" id="sBaskets">0</div><div class="stat-sub">จำนวนรายการทั้งหมด</div></div>
+    <div class="stat-card sc-green"><div class="stat-label">✅ ปิดสำเร็จ</div><div class="stat-value" id="sOk">0</div><div class="stat-sub">ร้านที่มี Approved ≥ 1</div></div>
+    <div class="stat-card sc-amber"><div class="stat-label">⏳ ยังไม่สำเร็จ</div><div class="stat-value" id="sNo">0</div><div class="stat-sub">ร้านที่ Rejected ทุกรายการ</div></div>
+  </div>
+
+  <div class="sec">กราฟสรุปและอัปโหลด</div>
+  <div class="charts-row">
+    <div class="card">
+      <div class="card-title">สัดส่วนสถานะร้าน</div>
+      <div class="pie-wrap"><canvas id="pie"></canvas></div>
+      <div class="legend">
+        <div class="leg-item"><div class="leg-dot" style="background:var(--green)"></div><span>ปิดสำเร็จ</span><span class="leg-val" id="lgOk">0</span></div>
+        <div class="leg-item"><div class="leg-dot" style="background:var(--amber)"></div><span>ยังไม่สำเร็จ</span><span class="leg-val" id="lgNo">0</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">อัปโหลดรูปภาพ</div>
+      <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileIn').click()">
+        <div style="font-size:28px">🖼️</div>
+        <div style="font-size:14px;color:var(--tx2)"><strong>คลิกเลือกรูปภาพ</strong> หรือลากวางที่นี่</div>
+        <div style="font-size:12px;color:var(--txh)">PNG, JPG — เลือกได้หลายรูป · 1 รูปมีหลายรายการได้</div>
+        <div class="preview-grid" id="previewGrid"></div>
+        <input type="file" id="fileIn" accept="image/*" multiple style="display:none">
+      </div>
+      <div class="ai-bar" id="aiBar"><div class="spinner"></div><span id="aiTxt">กำลังวิเคราะห์...</span></div>
+      <div class="upload-btn-row">
+        <button class="btn btn-pink" id="analyzeBtn" onclick="processImages()" style="display:none">🤖 วิเคราะห์ด้วย AI</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">รายการทั้งหมด — แสดงทุกแถว ทุกตะกร้า</div>
+  <div class="table-card">
+    <div class="toolbar">
+      <div class="sw"><span>🔍</span><input type="text" class="sinput" id="qSearch" placeholder="ค้นหา Shop ID, Basket ID, ชื่อร้าน..." oninput="renderTable()"></div>
+      <select class="fsel" id="fRow" onchange="renderTable()"><option value="">ทุกสถานะรายการ</option><option value="success">✅ Approved</option><option value="pending">❌ Rejected</option></select>
+      <select class="fsel" id="fShop" onchange="renderTable()"><option value="">ทุกสถานะร้าน</option><option value="success">🏪 ร้านสำเร็จ</option><option value="pending">🏪 ร้านยังรอ</option></select>
+    </div>
+    <div class="twrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:40px">#</th><th style="width:70px">รูป</th>
+            <th>Shop ID</th><th>ชื่อร้านค้า</th><th>Basket ID</th>
+            <th>วันที่</th><th>สถานะรายการ</th><th>สถานะร้าน</th><th style="width:28px"></th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="tfoot"><span id="tCount">0 ตะกร้า · 0 ร้าน</span><span id="tFilter" style="color:var(--txh)"></span></div>
+  </div>
+</div>
+
+<!-- Preview Modal (ตรวจก่อนบันทึก) -->
+<div class="modal-overlay" id="previewModal" style="z-index:1100">
+  <div class="modal-box" style="max-width:900px;width:95%">
+    <div class="modal-head">
+      <div>
+        <div style="font-size:12px;color:var(--txh);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">ตรวจสอบก่อนบันทึก</div>
+        <div style="font-size:16px;font-weight:700" id="previewTitle">ผลการวิเคราะห์รูปที่ 1</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span id="previewCount" style="font-size:13px;color:var(--txh)"></span>
+        <button onclick="closePreview()" style="width:32px;height:32px;border-radius:50%;border:none;background:var(--surface);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;color:var(--tx2)">✕</button>
+      </div>
+    </div>
+    <div style="padding:1rem 1.5rem;overflow-x:auto;max-height:60vh;overflow-y:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:13px" id="previewTable">
+        <thead>
+          <tr style="background:#F8F8F7;border-bottom:1px solid var(--border)">
+            <th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--txh)">#</th>
+            <th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--txh)">Shop ID <span style="color:var(--pink-d)">(คลิกแก้ไขได้)</span></th>
+            <th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--txh)">ชื่อร้าน</th>
+            <th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--txh)">Basket ID</th>
+            <th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--txh)">สถานะ</th>
+            <th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--txh)">⚠️</th>
+          </tr>
+        </thead>
+        <tbody id="previewTbody"></tbody>
+      </table>
+    </div>
+    <div class="modal-foot" style="gap:10px">
+      <button onclick="closePreview()" class="btn">ยกเลิก ไม่บันทึก</button>
+      <button onclick="confirmSave()" class="btn btn-pink">✅ ยืนยันบันทึกทั้งหมด</button>
+    </div>
+  </div>
+</div>
+
+<!-- Lightbox -->
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+  <button class="lb-close" onclick="closeLightbox()">✕</button>
+  <img id="lbImg" src="" alt="" onclick="event.stopPropagation()">
+  <div class="lb-hint">คลิกนอกรูปเพื่อปิด · Scroll เพื่อซูม</div>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modal" onclick="if(event.target===this)closeModal()">
+  <div class="modal-box">
+    <div class="modal-head">
+      <div>
+        <div style="font-size:12px;color:var(--txh);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">รายละเอียดรายการ</div>
+        <div id="mShopName" style="font-size:16px;font-weight:700"></div>
+      </div>
+      <button onclick="closeModal()" style="width:32px;height:32px;border-radius:50%;border:none;background:var(--surface);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;color:var(--tx2)">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="mImgWrap" style="display:none;border-radius:12px;overflow:hidden;border:1px solid var(--border)">
+        <div style="font-size:11px;color:var(--txh);font-weight:600;text-transform:uppercase;letter-spacing:.5px;padding:8px 12px 4px;background:#F8F8F7">รูปภาพรายการ (คลิกเพื่อขยาย)</div>
+        <img id="mImg" src="" alt="" class="modal-img" onclick="openLightbox(this.src)">
+      </div>
+      <div class="info-grid">
+        <div class="info-box" style="background:var(--pink-bg);border:1px solid var(--pink-b)">
+          <div class="info-label" style="display:flex;align-items:center;justify-content:space-between">
+            Shop ID
+            <button onclick="editShopId()" style="font-size:11px;padding:2px 8px;border-radius:6px;border:1px solid var(--pink-b);background:var(--pink-bg);color:var(--pink-d);cursor:pointer;font-family:inherit">✏️ แก้ไข</button>
+          </div>
+          <div id="mShopId" class="info-val" style="color:var(--pink-d)"></div>
+        </div>
+        <div class="info-box" style="background:var(--blue-bg);border:1px solid var(--blue-b)"><div class="info-label">Basket ID</div><div id="mBasketId" class="info-val" style="color:var(--blue-d)"></div></div>
+      </div>
+      <div class="info-grid">
+        <div class="info-box" style="background:var(--surface);border:1px solid var(--border)"><div class="info-label">วันที่ตรวจพบ</div><div id="mDate" style="font-size:14px;font-weight:600"></div></div>
+        <div class="info-box" style="background:var(--surface);border:1px solid var(--border)"><div class="info-label">สถานะรายการ</div><div id="mRowStatus"></div></div>
+      </div>
+      <div class="info-box" style="background:var(--surface);border:1px solid var(--border)">
+        <div class="info-label">สถานะร้าน (ภาพรวมทุกตะกร้า)</div>
+        <div id="mShopStatus" style="margin-bottom:6px"></div>
+        <div id="mShopNote" style="font-size:12px;color:var(--txh);line-height:1.5"></div>
+      </div>
+    </div>
+    <div class="modal-foot"><button onclick="closeModal()" class="btn">ปิด</button></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── FIREBASE CONFIG ────────────────────────────────────────
+var firebaseConfig = {
+  apiKey:            "AIzaSyDUB1tKlkYEAo-9NcEFbEjUi1NP1jsqU1w",
+  authDomain:        "fakeshop-11fdd.firebaseapp.com",
+  databaseURL:       "https://fakeshop-11fdd-default-rtdb.firebaseio.com",
+  projectId:         "fakeshop-11fdd",
+  storageBucket:     "fakeshop-11fdd.firebasestorage.app",
+  messagingSenderId: "366093703419",
+  appId:             "1:366093703419:web:68b5c05835ecccb809385e"
+};
+// Firebase จะถูก init ใน initFirebase() หลัง window.load
+
+// ── CLOUDINARY CONFIG ─────────────────────────────────────
+var CLOUDINARY_CLOUD = 'dvvsnauwl';
+var CLOUDINARY_PRESET = 'fakeshop';
+
+// ── GLOBALS ────────────────────────────────────────────────
+var db = null, rowsRef = null;
+var allRows       = [];
+var uploadedFiles = [];
+var pieChart      = null;
+var lbScale       = 1;
+var fbLoaded      = false;
+
+// ── KNOWN SHOPS ────────────────────────────────────────────
+var KNOWN = {
+  'vaseline thailand':           '7494289022809441433',
+  'skintific shop':              '7494414021473699054',
+  'skintiflc shop':              '7494414021473699054',
+  'fbvdf pleasuretkshop':        '7494374210045970142',
+  'มด ญาจิน่า thailand store':   '7494585013773370519',
+  'glammshop':                   '7494414672255288760',
+  'glammshop online':            '7494366604649688860',
+  'beauty off sunshine live':    '7495710006532802704',
+  'nhk pleasuretkshop':          '7494374114312750851',
+  'gregre pleasuretkshop':       '7494366810527729520',
+  'mabel9181 tool shop':         '7495772904817593072',
+  'sihu8he':                     '7495472474589005994',
+  'colby hudson':                '7494615685497849167',
+  'konvy thailand live':         '7495678979829696641',
+  'zoracare':                    '7494631119926297700',
+  'konvy th.':                   '7494158754992653993',
+  'aag18144 lucky shop':         '7495991656177109569',
+  'glam. online':                '7494581297757390571',
+  'julaherb exclusive shop':     '7494380698516227680',
+  'cnuje tkshop':                '7494384743217203073',
+  'glamm-official':              '7494384792510760519',
+  'warm hearth studio':          '7494519885065061668',
+  'watsonthai shop':             '7494537982663755442',
+  'honey glow':                  '7494494529422329507',
+  'bwhite cosmetics':            '7494380696626693732',
+  'jt beauty free zone':         '7494524025024447497',
+  'booster btyka':               '7494498326132524190',
+  'gentle mode collection':      '7494511949628540030',
+  'back in town':                '7494516448833078539',
+  'glad2glowthai online store':  '7494414161498638222',
+  'wood & warmth home':          '7494519926006514712',
+  'yerpall direct-operated store': '74943663280277328',
+  'fine living home goods':      '7494498400687719569',
+  'basic home studio':           '7494519935048254502',
+  'glad2glowthai online beaity': '7494384038584812862',
+  'soft korean feminine studio': '7494511948724208743',
+  'konvythai.':                  '7494526786585527868',
+  'hqiwhdjqshop':                '7494501056458884642',
+  'yerpallthailand.store':       '7494386539700782736',
+  'gfrgr pleasuretkshop':        '7494354666574611709',
+  'aa7502 a shop shop':          '7496117056032771009',
+  'glamshop':                    '7494414021444863822',
+  'glamm online th':             '7494379715846964628',
+  'konvythailand'shop':         '7494168614125864738',
+  'dfsdfe pleasuretkshop':       '749435247525036423',
+  'glamm th online':             '7494392509801465467',
+  'skintific online thailand':   '7494089084209235622',
+  'mqmqbu':                      '7494356252020934423',
+  'yerpallthailand shop':        '7494386647335470749',
+  'glamm-beauty':                '7494377680314533365',
+  'yerpallthailand store online': '7494386446905214124',
+  'dfgf pleasuretkshop':         '7494300892304541021',
+  'glammoffic1al':               '7494347554987869869',
+  'glammstore':                  '7494414629951538608',
+  'sdfs pleasuretkshop':         '7494374114310260481',
+  'gfhtrht pleasuretkshop':      '7494347134036969166',
+  'watsons-shop':                '7494343627654661823',
+  'vfbn pleasuretkshop':         '7494363119977138064',
+  'vfdrf pleasuretkshop':        '7494354465410811125',
+  'bgngf pleasuretkshop':        '7494363072140248982',
+  'glamm shop online':           '749441599474087463',
+};
+
+function fixShopId(name, sid) {
+  var key = (name || '').toLowerCase().trim();
+  if (KNOWN[key]) return KNOWN[key];
+  var s = String(sid || '').replace(/[^0-9]/g, '');
+  if (s.length > 19) s = s.slice(0, 19);
+  return s;
+}
+
+// ── FIREBASE INIT ──────────────────────────────────────────
+function initFirebase() {
+  try {
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.database();
+    rowsRef = db.ref('rows');
+    startListening();
+  } catch(e) {
+    setSyncStatus(false, 'เชื่อมต่อไม่ได้');
+    console.error('Firebase init error:', e);
+  }
+}
+
+function startListening() {
+  rowsRef.on('value', function(snap) {
+    var data = snap.val();
+    if (data) {
+      allRows = Object.values(data).map(function(r) {
+        return { shopId:r.shopId||'', shopName:r.shopName||'', basketId:r.basketId||'', date:r.date||'', status:r.status||'pending', imageUrl:r.imageUrl||null };
+      });
+    } else {
+      allRows = [];
+    }
+    fbLoaded = true;
+    setSyncStatus(true, '🔴 Live · ' + allRows.length + ' รายการ');
+    updateAll();
+  }, function(err) {
+    setSyncStatus(false, 'เชื่อมต่อไม่ได้');
+    console.error(err);
+  });
+}
+
+// ── FIREBASE SYNC ──────────────────────────────────────────
+function setSyncStatus(ok, txt) {
+  var badge = document.getElementById('syncBadge');
+  var dot   = document.getElementById('syncDot');
+  var label = document.getElementById('syncTxt');
+  badge.className = 'sync-badge ' + (ok ? 'sync-ok' : 'sync-err');
+  dot.style.background = ok ? 'var(--green)' : 'var(--red-d)';
+  label.textContent = txt;
+}
+
+
+
+// Push rows to Firebase
+function pushToFirebase(newRows) {
+  if (!rowsRef) { showToast('Firebase ยังไม่พร้อม','err'); return; }
+  var updates = {};
+  newRows.forEach(function(r) {
+    var key = r.basketId || db.ref().push().key;
+    updates['rows/' + key] = {
+      shopId:r.shopId, shopName:r.shopName, basketId:r.basketId,
+      date:r.date, status:r.status,
+      imageUrl: r.imageUrl || null
+    };
+  });
+  db.ref().update(updates).catch(function(e){ showToast('Firebase error: ' + e.message, 'err'); });
+}
+
+// ── SHOP STATUS ────────────────────────────────────────────
+function ssMap() {
+  var m = {};
+  for (var i = 0; i < allRows.length; i++) {
+    var r = allRows[i];
+    if (!(r.shopId in m)) m[r.shopId] = false;
+    if (r.status === 'success') m[r.shopId] = true;
+  }
+  return m;
+}
+
+// ── UPDATE ALL ─────────────────────────────────────────────
+function updateAll() {
+  var ss  = ssMap();
+  var ids = Object.keys(ss);
+  var ok  = ids.filter(function(id){ return ss[id]; }).length;
+  var no  = ids.length - ok;
+  document.getElementById('sShops').textContent   = ids.length;
+  document.getElementById('sBaskets').textContent = allRows.length;
+  document.getElementById('sOk').textContent      = ok;
+  document.getElementById('sNo').textContent      = no;
+  document.getElementById('lgOk').textContent     = ok;
+  document.getElementById('lgNo').textContent     = no;
+  updatePie(ok, no);
+  renderTable();
+}
+
+// ── PIE ────────────────────────────────────────────────────
+function updatePie(ok, no) {
+  var ctx = document.getElementById('pie').getContext('2d');
+  var tot = ok + no;
+  var data   = tot === 0 ? [1,1] : [ok,no];
+  var colors = tot === 0 ? ['#E8E8E8','#E8E8E8'] : ['#3DB85A','#E8A625'];
+  if (pieChart) { pieChart.data.datasets[0].data=data; pieChart.data.datasets[0].backgroundColor=colors; pieChart.update(); return; }
+  pieChart = new Chart(ctx, {
+    type:'doughnut',
+    data:{ labels:['ปิดสำเร็จ','ยังไม่สำเร็จ'], datasets:[{data:data,backgroundColor:colors,borderWidth:3,borderColor:'#fff',hoverOffset:6}] },
+    options:{ responsive:true, maintainAspectRatio:false, cutout:'62%',
+      plugins:{ legend:{display:false}, tooltip:{callbacks:{label:function(c){
+        var v=c.raw, t=c.dataset.data.reduce(function(a,b){return a+b;},0);
+        return ' '+c.label+': '+v+' ร้าน ('+(t?Math.round(v/t*100):0)+'%)';
+      }}}}
+    }
+  });
+}
+
+// ── TABLE ──────────────────────────────────────────────────
+function badge(ok, label) {
+  return '<span class="badge '+(ok?'b-ok':'b-no')+'"><span class="bdot"></span>'+label+'</span>';
+}
+function fmtDate(d) {
+  if (!d) return '-';
+  try { return new Date(d).toLocaleDateString('th-TH',{year:'numeric',month:'short',day:'numeric'}); } catch(e){ return d; }
+}
+function renderTable() {
+  var ss  = ssMap();
+  var q   = document.getElementById('qSearch').value.toLowerCase().trim();
+  var rf  = document.getElementById('fRow').value;
+  var sf  = document.getElementById('fShop').value;
+  var rows = allRows.filter(function(r) {
+    var mQ = !q || r.shopId.toLowerCase().includes(q) || r.basketId.toLowerCase().includes(q) || (r.shopName||'').toLowerCase().includes(q);
+    var mR = !rf || r.status === rf;
+    var mS = !sf || (ss[r.shopId]?'success':'pending') === sf;
+    return mQ && mR && mS;
+  });
+  var tbody = document.getElementById('tbody');
+  if (!rows.length) {
+    var msg = allRows.length === 0
+      ? '<div style="font-size:32px;margin-bottom:8px">🖼️</div><div style="font-size:14px;color:#6B6870;margin-bottom:4px">'+(fbLoaded?'ยังไม่มีข้อมูล':'กำลังโหลดข้อมูล...')+'</div>'
+      : '<div style="font-size:32px;margin-bottom:8px">🔍</div><div style="font-size:14px;color:#6B6870">ไม่พบรายการที่ตรงกับเงื่อนไข</div>';
+    tbody.innerHTML = '<tr><td colspan="9" class="empty">'+msg+'</td></tr>';
+  } else {
+    tbody.innerHTML = rows.map(function(r,i) {
+      var realIdx = allRows.indexOf(r);
+      var shopOk  = ss[r.shopId];
+      var thumb   = r.imageUrl
+        ? '<img src="'+r.imageUrl+'" style="width:60px;height:36px;object-fit:cover;border-radius:6px;border:1px solid rgba(0,0,0,.1);display:block;cursor:zoom-in" onclick="event.stopPropagation();openLightbox(\''+r.imageUrl+'\')">'
+        : '<div style="width:60px;height:36px;border-radius:6px;background:#F0F0EE;display:flex;align-items:center;justify-content:center;font-size:14px">🖼️</div>';
+      return '<tr onclick="openModal('+realIdx+')">'
+        +'<td style="color:var(--txh);font-size:12px">'+(i+1)+'</td>'
+        +'<td style="padding:6px 8px">'+thumb+'</td>'
+        +'<td onclick="event.stopPropagation()" style="min-width:120px">'
+        +'<span class="shop-pill-edit" contenteditable="true" '
+        +'title="คลิกเพื่อแก้ไข Shop ID" '
+        +'data-idx="'+realIdx+'" '
+        +'data-original="'+r.shopId+'" '
+        +'onblur="saveShopId(this)" '
+        +'onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}" '
+        +'>'+r.shopId+'</span>'
+        +'</td>'
+        +'<td style="font-size:13px;color:var(--tx2)" title="'+(r.shopName||'')+'">'+(r.shopName||'-')+'</td>'
+        +'<td style="font-family:monospace;font-size:12px;color:var(--tx2)" title="'+r.basketId+'">'+r.basketId+'</td>'
+        +'<td style="font-size:13px;color:var(--tx2)">'+fmtDate(r.date)+'</td>'
+        +'<td>'+badge(r.status==='success', r.status==='success'?'Approved':'Rejected')+'</td>'
+        +'<td>'+badge(shopOk, shopOk?'ร้านสำเร็จ':'ยังรอ')+'</td>'
+        +'<td style="color:var(--txh);text-align:center">›</td>'
+        +'</tr>';
+    }).join('');
+  }
+  var ids2 = Object.keys(ssMap());
+  document.getElementById('tCount').textContent = allRows.length+' ตะกร้า · '+ids2.length+' ร้าน';
+  document.getElementById('tFilter').textContent = rows.length !== allRows.length ? 'แสดง '+rows.length+' รายการ' : '';
+}
+
+// ── LIGHTBOX ────────────────────────────────────────────────
+function openLightbox(src) {
+  lbScale = 1;
+  var img = document.getElementById('lbImg');
+  img.src = src; img.style.transform = 'scale(1)';
+  document.getElementById('lightbox').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('open');
+  document.body.style.overflow = '';
+}
+document.addEventListener('wheel', function(e) {
+  if (!document.getElementById('lightbox').classList.contains('open')) return;
+  e.preventDefault();
+  lbScale = Math.min(4, Math.max(0.5, lbScale - e.deltaY * 0.001));
+  document.getElementById('lbImg').style.transform = 'scale('+lbScale+')';
+}, { passive:false });
+
+// ── INLINE EDIT SHOP ID ───────────────────────────────────
+function saveShopId(el) {
+  var newId = el.textContent.trim().replace(/[^0-9]/g, '');
+  var idx   = parseInt(el.getAttribute('data-idx'));
+  var oldId = el.getAttribute('data-original');
+
+  if (!newId || newId === oldId) {
+    el.textContent = oldId; // reset ถ้าไม่เปลี่ยน
+    return;
+  }
+  if (newId.length > 19) newId = newId.slice(0, 19);
+
+  var r = allRows[idx];
+  if (!r) return;
+
+  var shopRows = allRows.filter(function(x){ return x.shopId === oldId; });
+  if (!confirm('แก้ไข Shop ID\n"' + oldId + '"\n→ "' + newId + '"\n\nจะอัปเดต ' + shopRows.length + ' รายการของร้านนี้ ใช่ไหม?')) {
+    el.textContent = oldId;
+    return;
+  }
+
+  el.textContent = newId;
+  el.setAttribute('data-original', newId);
+
+  // อัปเดต KNOWN dictionary
+  if (r.shopName) KNOWN[r.shopName.toLowerCase().trim()] = newId;
+
+  // อัปเดตใน Firebase ทุก row ของร้านนี้
+  if (!db) { showToast('Firebase ยังไม่พร้อม', 'err'); return; }
+  var updates = {};
+  shopRows.forEach(function(row) {
+    updates['rows/' + row.basketId + '/shopId'] = newId;
+  });
+  db.ref().update(updates).then(function() {
+    showToast('แก้ไข Shop ID สำเร็จ ' + shopRows.length + ' รายการ', 'ok');
+  }).catch(function(e) {
+    showToast('แก้ไขไม่สำเร็จ: ' + e.message, 'err');
+  });
+}
+
+// ── EDIT SHOP ID ──────────────────────────────────────────
+var currentEditIdx = -1;
+
+function editShopId() {
+  var current = document.getElementById('mShopId').textContent;
+  var newId = prompt('แก้ไข Shop ID:\n(ต้องเป็นตัวเลข 19 หลัก)', current);
+  if (!newId) return;
+  newId = newId.trim().replace(/[^0-9]/g, '');
+  if (!newId) { alert('Shop ID ต้องเป็นตัวเลขเท่านั้น'); return; }
+  if (newId.length > 19) newId = newId.slice(0, 19);
+
+  var r = allRows[currentEditIdx];
+  if (!r) return;
+
+  var oldId = r.shopId;
+  var shopName = r.shopName || '';
+
+  // อัปเดตทุก row ที่มี shopId เดิม (ทั้งร้าน)
+  if (!confirm('แก้ไข Shop ID "' + oldId + '" → "' + newId + '"\nจะอัปเดตทุกตะกร้าของร้านนี้ (' + allRows.filter(function(x){return x.shopId===oldId;}).length + ' รายการ) ใช่ไหม?')) return;
+
+  // อัปเดตใน Firebase
+  var updates = {};
+  allRows.forEach(function(row) {
+    if (row.shopId === oldId) {
+      updates['rows/' + row.basketId + '/shopId'] = newId;
+    }
+  });
+
+  // เพิ่ม shopName ใหม่เข้า KNOWN dictionary ชั่วคราว
+  if (shopName) {
+    KNOWN[shopName.toLowerCase().trim()] = newId;
+  }
+
+  db.ref().update(updates).then(function() {
+    showToast('แก้ไข Shop ID สำเร็จ ' + Object.keys(updates).length + ' รายการ', 'ok');
+    document.getElementById('mShopId').textContent = newId;
+  }).catch(function(e) {
+    showToast('แก้ไขไม่สำเร็จ: ' + e.message, 'err');
+  });
+}
+
+// ── MODAL ──────────────────────────────────────────────────
+function openModal(idx) {
+  currentEditIdx = idx;
+  var r = allRows[idx]; if (!r) return;
+  var ss = ssMap(), shopOk = ss[r.shopId];
+  var shopRows = allRows.filter(function(x){ return x.shopId===r.shopId; });
+  var okCount  = shopRows.filter(function(x){ return x.status==='success'; }).length;
+  document.getElementById('mShopName').textContent = r.shopName || r.shopId;
+  document.getElementById('mShopId').textContent   = r.shopId;
+  document.getElementById('mBasketId').textContent = r.basketId;
+  document.getElementById('mDate').textContent     = fmtDate(r.date);
+  document.getElementById('mRowStatus').innerHTML  = badge(r.status==='success', r.status==='success'?'Approved':'Rejected');
+  document.getElementById('mShopStatus').innerHTML = badge(shopOk, shopOk?'ร้านสำเร็จ':'ยังรอ');
+  document.getElementById('mShopNote').textContent = 'ร้านนี้มี '+shopRows.length+' ตะกร้า · Approved '+okCount+' · Rejected '+(shopRows.length-okCount);
+  var imgWrap = document.getElementById('mImgWrap');
+  if (r.imageUrl) { document.getElementById('mImg').src=r.imageUrl; imgWrap.style.display='block'; }
+  else imgWrap.style.display='none';
+  document.getElementById('modal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeModal() {
+  document.getElementById('modal').classList.remove('open');
+  document.body.style.overflow = '';
+}
+document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ closeLightbox(); closeModal(); } });
+
+// ── CLEAR ──────────────────────────────────────────────────
+function clearAll() {
+  if (!allRows.length) { showToast('ไม่มีข้อมูลให้ล้าง','err'); return; }
+  if (!confirm('ยืนยันล้างข้อมูลทั้งหมด?\n\nข้อมูลจะถูกลบออกจาก Firebase ด้วย ทุกคนจะไม่เห็นข้อมูลนี้อีก')) return;
+  rowsRef.remove().then(function(){
+    showToast('ล้างข้อมูลทั้งหมดแล้ว','ok');
+  }).catch(function(e){ showToast('ลบไม่สำเร็จ: '+e.message,'err'); });
+}
+
+// ── UPLOAD ─────────────────────────────────────────────────
+var dropZone = document.getElementById('dropZone');
+var fileIn   = document.getElementById('fileIn');
+fileIn.addEventListener('change', function(e){ addFiles(Array.from(e.target.files)); e.target.value=''; });
+dropZone.addEventListener('dragover', function(e){ e.preventDefault(); dropZone.classList.add('over'); });
+dropZone.addEventListener('dragleave', function(){ dropZone.classList.remove('over'); });
+dropZone.addEventListener('drop', function(e){
+  e.preventDefault(); dropZone.classList.remove('over');
+  addFiles(Array.from(e.dataTransfer.files).filter(function(f){ return f.type.startsWith('image/'); }));
+});
+function addFiles(files) {
+  uploadedFiles = uploadedFiles.concat(files);
+  renderPreviews();
+  document.getElementById('analyzeBtn').style.display = uploadedFiles.length ? 'inline-flex' : 'none';
+}
+function renderPreviews() {
+  document.getElementById('previewGrid').innerHTML = uploadedFiles.map(function(f,i){
+    return '<div class="thumb"><img src="'+URL.createObjectURL(f)+'" alt=""><button class="rm" onclick="event.stopPropagation();rmFile('+i+')">✕</button></div>';
+  }).join('');
+}
+function rmFile(i) {
+  uploadedFiles.splice(i,1); renderPreviews();
+  document.getElementById('analyzeBtn').style.display = uploadedFiles.length ? 'inline-flex' : 'none';
+}
+
+// ── CLOUDINARY UPLOAD ─────────────────────────────────────
+async function uploadToCloudinary(dataUrl) {
+  try {
+    // แปลง dataUrl → Blob
+    var arr = dataUrl.split(','), mime = arr[0].match(/:(.*?);/)[1];
+    var bstr = atob(arr[1]), n = bstr.length, u8arr = new Uint8Array(n);
+    while (n--) u8arr[n] = bstr.charCodeAt(n);
+    var blob = new Blob([u8arr], { type: mime });
+
+    var fd = new FormData();
+    fd.append('file', blob);
+    fd.append('upload_preset', CLOUDINARY_PRESET);
+    fd.append('folder', 'fakeshop');
+
+    var res = await fetch('https://api.cloudinary.com/v1_1/' + CLOUDINARY_CLOUD + '/image/upload', {
+      method: 'POST', body: fd
+    });
+    if (!res.ok) throw new Error('Cloudinary HTTP ' + res.status);
+    var data = await res.json();
+    return data.secure_url; // URL ถาวรที่ทุกคนเปิดได้
+  } catch(e) {
+    console.warn('Cloudinary upload failed:', e.message);
+    return null;
+  }
+}
+
+// ── CANVAS CROP ────────────────────────────────────────────
+function cropImageRows(b64, mime, rowCount) {
+  return new Promise(function(resolve) {
+    if (!rowCount) { resolve([]); return; }
+    var img = new Image();
+    img.onload = function() {
+      var W=img.naturalWidth, H=img.naturalHeight, stripH=Math.floor(H/rowCount), results=[];
+      for (var i=0; i<rowCount; i++) {
+        var cv=document.createElement('canvas'); cv.width=W; cv.height=stripH;
+        cv.getContext('2d').drawImage(img, 0, i*stripH, W, stripH, 0, 0, W, stripH);
+        results.push(cv.toDataURL('image/jpeg', 0.85));
+      }
+      resolve(results);
+    };
+    img.onerror = function(){ resolve([]); };
+    img.src = 'data:'+mime+';base64,'+b64;
+  });
+}
+
+// ── HELPERS ────────────────────────────────────────────────
+function toB64(file) {
+  return new Promise(function(res,rej){ var r=new FileReader(); r.onload=function(){res(r.result.split(',')[1]);}; r.onerror=rej; r.readAsDataURL(file); });
+}
+function extractJSON(txt) {
+  var s = txt.replace(/```json/gi,'').replace(/```/g,'').trim();
+  var start=s.indexOf('['), end=s.lastIndexOf(']');
+  if (start<0||end<0) throw new Error('ไม่พบ JSON array');
+  return JSON.parse(s.slice(start,end+1));
+}
+
+// ── PREVIEW BEFORE SAVE ───────────────────────────────────
+var pendingRows = []; // rows รอบันทึก
+
+function showPreview(rows, imgTitle) {
+  pendingRows = rows;
+  document.getElementById('previewTitle').textContent = imgTitle;
+  document.getElementById('previewCount').textContent = rows.length + ' รายการ';
+
+  var tbody = document.getElementById('previewTbody');
+  tbody.innerHTML = rows.map(function(r, i) {
+    var inKnown = KNOWN[( r.shopName||'').toLowerCase().trim()];
+    var warn = '';
+    if (r.shopId.length < 17) warn = '<span style="color:var(--red-d);font-size:11px">⚠️ ID สั้น</span>';
+    else if (!inKnown) warn = '<span style="color:var(--amber-d);font-size:11px">❓ ไม่อยู่ใน dictionary</span>';
+    else if (inKnown !== r.shopId) warn = '<span style="color:var(--red-d);font-size:11px">❌ ควรเป็น '+inKnown+'</span>';
+    else warn = '<span style="color:var(--green-d);font-size:11px">✅</span>';
+
+    return '<tr style="border-bottom:1px solid rgba(0,0,0,.06)">'
+      +'<td style="padding:7px 10px;color:var(--txh);font-size:12px">'+(i+1)+'</td>'
+      +'<td style="padding:7px 10px">'
+        +'<span contenteditable="true" '
+        +'style="font-family:monospace;font-size:12px;color:var(--pink-d);background:var(--pink-bg);padding:2px 6px;border-radius:6px;border:1px dashed var(--pink-b);outline:none;cursor:text" '
+        +'data-pidx="'+i+'" '
+        +'onblur="updatePendingShopId(this)" '
+        +'onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}" '
+        +'>'+r.shopId+'</span>'
+      +'</td>'
+      +'<td style="padding:7px 10px;font-size:13px;color:var(--tx2)">'+( r.shopName||'-')+'</td>'
+      +'<td style="padding:7px 10px;font-family:monospace;font-size:11px;color:var(--tx2)">'+r.basketId+'</td>'
+      +'<td style="padding:7px 10px">'+badge(r.status==='success','Approved'===r.status?'Approved':'Rejected')+'</td>'
+      +'<td style="padding:7px 10px">'+warn+'</td>'
+      +'</tr>';
+  }).join('');
+
+  document.getElementById('previewModal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function updatePendingShopId(el) {
+  var idx = parseInt(el.getAttribute('data-pidx'));
+  var newId = el.textContent.trim().replace(/[^0-9]/g, '');
+  if (newId.length > 19) newId = newId.slice(0,19);
+  if (pendingRows[idx]) pendingRows[idx].shopId = newId;
+  el.textContent = newId;
+}
+
+function closePreview() {
+  document.getElementById('previewModal').classList.remove('open');
+  document.body.style.overflow = '';
+  pendingRows = [];
+}
+
+function confirmSave() {
+  if (!pendingRows.length) return;
+  // กรองซ้ำ
+  var existingIds = {};
+  allRows.forEach(function(r){ existingIds[r.basketId]=true; });
+  var newRows=[], dup=0;
+  pendingRows.forEach(function(r){
+    if (existingIds[r.basketId]) { dup++; return; }
+    existingIds[r.basketId]=true;
+    newRows.push(r);
+  });
+  if (newRows.length > 0) pushToFirebase(newRows);
+  closePreview();
+  var msg = 'บันทึก '+newRows.length+' รายการสำเร็จ';
+  if (dup>0) msg += ' (ซ้ำ '+dup+' ข้าม)';
+  showToast(msg, 'ok');
+}
+
+// ── PROCESS IMAGES ─────────────────────────────────────────
+async function processImages() {
+  var apiKey = document.getElementById('apiKey').value.trim();
+  if (!apiKey) { showToast('⚠️ กรุณาใส่ Anthropic API Key ก่อน','err'); return; }
+  if (!uploadedFiles.length) { showToast('กรุณาเลือกรูปภาพก่อน','err'); return; }
+
+  var bar=document.getElementById('aiBar'), txt=document.getElementById('aiTxt'), btn=document.getElementById('analyzeBtn');
+  bar.style.display='flex'; btn.disabled=true;
+
+  var today = new Date().toISOString().slice(0,10);
+  // ใส่ร้านที่รู้จักทั้งหมดใน prompt
+  var knownLines = Object.keys(KNOWN).map(function(k){
+    return '   "'+k+'" → shopId = "'+KNOWN[k]+'"';
+  }).join('\n');
+
+  var prompt = 'คุณเป็น AI อ่านข้อมูลจากหน้าจอระบบปิดร้านปลอม ต้องอ่านให้ถูกต้องและครบถ้วน\n\n'
+    +'=== กฎบังคับ ===\n'
+    +'1. ดึงทุกแถวในภาพ ห้ามข้ามแม้แต่แถวเดียว\n'
+    +'2. shopId: ตัวเลขหลัง "ID:" ใต้ชื่อร้านทางขวา — อ่านทีละหลักอย่างระมัดระวัง มักมี 19 หลัก\n'
+    +'3. สำคัญ: ถ้าชื่อร้านตรงกับรายการด้านล่าง ให้ใช้ shopId ที่กำหนดเท่านั้น ห้ามอ่านจากภาพ\n'
+    +'4. basketId: ตัวเลขหลัง "ID:" ใต้ชื่อสินค้าทางซ้าย — อ่านให้ครบทุกหลัก\n'
+    +'5. shopName: คัดลอกตรงๆ จากภาพ ห้ามแก้ไข\n'
+    +'6. date: YYYY-MM-DD (ใช้ '+today+' ถ้าไม่มี)\n'
+    +'7. status: "success" ถ้าเห็น Approved / "pending" ถ้าเห็น Rejected\n\n'
+    +'=== รายชื่อร้านที่รู้จัก (ถ้าชื่อตรงให้ใช้ shopId นี้เสมอ) ===\n'
+    +knownLines+'\n\n'
+    +'=== ตัวอย่าง output ที่ถูกต้อง ===\n'
+    +'[{"shopId":"7494289022809441433","shopName":"Vaseline Thailand","basketId":"17354493935241477710","date":"'+today+'","status":"pending"},\n'
+    +' {"shopId":"7494414021473699054","shopName":"skintific shop","basketId":"17354804882492961100","date":"'+today+'","status":"success"}]\n\n'
+    +'ตอบเฉพาะ JSON array เท่านั้น ไม่มีข้อความอื่น ไม่มี markdown';
+
+  var total=0, cnt=uploadedFiles.length;
+  for (var i=0; i<cnt; i++) {
+    txt.textContent = 'กำลังวิเคราะห์รูปที่ '+(i+1)+'/'+cnt+'...';
+    try {
+      var b64  = await toB64(uploadedFiles[i]);
+      var mime = uploadedFiles[i].type;
+      var res  = await fetch('https://api.anthropic.com/v1/messages', {
+        method:'POST',
+        headers:{ 'content-type':'application/json', 'x-api-key':apiKey, 'anthropic-version':'2023-06-01', 'anthropic-dangerous-direct-browser-access':'true' },
+        body:JSON.stringify({ model:'claude-sonnet-4-5', max_tokens:4000,
+          messages:[{role:'user',content:[
+            {type:'image',source:{type:'base64',media_type:mime,data:b64}},
+            {type:'text',text:prompt}
+          ]}]
+        }),
+      });
+      if (!res.ok) { var e=await res.json().catch(function(){return {};}); throw new Error(e.error?e.error.message:'HTTP '+res.status); }
+      var data    = await res.json();
+      var rawTxt  = data.content.map(function(c){return c.text||'';}).join('');
+      var parsed  = extractJSON(rawTxt);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        var croppedUrls = await cropImageRows(b64, mime, parsed.length);
+        // check duplicates against existing
+        var existingIds = {};
+        allRows.forEach(function(r){ existingIds[r.basketId]=true; });
+        var newRows=[], dup=0;
+        parsed.forEach(function(r,ri) {
+          var bid = String(r.basketId||'').replace(/[^0-9]/g,'');
+          if (existingIds[bid]) { dup++; return; }
+          existingIds[bid]=true;
+          newRows.push({ shopId:fixShopId(r.shopName,r.shopId), shopName:String(r.shopName||''), basketId:bid, date:r.date||today, status:r.status||'pending', imageUrl:croppedUrls[ri]||null });
+        });
+        if (newRows.length > 0) {
+          txt.textContent = 'กำลังอัปโหลดรูปขึ้น Cloudinary...';
+          var uploadedRows = await Promise.all(newRows.map(async function(r) {
+            if (r.imageUrl) {
+              var cloudUrl = await uploadToCloudinary(r.imageUrl);
+              return Object.assign({}, r, { imageUrl: cloudUrl || null });
+            }
+            return r;
+          }));
+          pushToFirebase(uploadedRows);
+          total += uploadedRows.length;
+        }
+        if (dup > 0) showToast('รูปที่ '+(i+1)+': ซ้ำ '+dup+' รายการ ข้าม','ok');
+      } else {
+        showToast('รูปที่ '+(i+1)+': ไม่พบรายการในภาพ','err');
+      }
+    } catch(err) {
+      console.error(err);
+      showToast('รูปที่ '+(i+1)+': '+err.message,'err');
+    }
+  }
+  bar.style.display='none'; btn.disabled=false;
+  uploadedFiles=[]; document.getElementById('previewGrid').innerHTML=''; btn.style.display='none';
+  if (total > 0) showToast('วิเคราะห์เสร็จ บันทึก '+total+' รายการขึ้น Firebase แล้ว','ok');
+}
+
+// ── EXPORT EXCEL ───────────────────────────────────────────
+function exportExcel() {
+  if (!allRows.length) { showToast('ไม่มีข้อมูลให้ดาวน์โหลด','err'); return; }
+  var today = new Date().toISOString().slice(0,10);
+  var ss=ssMap(), wb=XLSX.utils.book_new();
+  var ws1d=[['#','Shop ID','ชื่อร้านค้า','Basket ID','วันที่ตรวจพบ','สถานะรายการ','สถานะร้าน']];
+  allRows.forEach(function(r,i){ ws1d.push([i+1,r.shopId,r.shopName||'-',r.basketId,r.date||'-',r.status==='success'?'Approved':'Rejected',ss[r.shopId]?'สำเร็จ':'ยังรอ']); });
+  var ws1=XLSX.utils.aoa_to_sheet(ws1d); ws1['!cols']=[{wch:5},{wch:22},{wch:24},{wch:22},{wch:14},{wch:12},{wch:12}];
+  XLSX.utils.book_append_sheet(wb,ws1,'รายการทั้งหมด');
+  var ids=Object.keys(ss), ws2d=[['#','Shop ID','ชื่อร้านค้า','จำนวนตะกร้า','Approved','Rejected','สถานะร้าน']];
+  ids.forEach(function(id,i){ var sr=allRows.filter(function(r){return r.shopId===id;}), ok=sr.filter(function(r){return r.status==='success';}).length; ws2d.push([i+1,id,sr[0]?sr[0].shopName||'-':'-',sr.length,ok,sr.length-ok,ss[id]?'สำเร็จ':'ยังรอ']); });
+  var ws2=XLSX.utils.aoa_to_sheet(ws2d); ws2['!cols']=[{wch:5},{wch:22},{wch:24},{wch:12},{wch:10},{wch:10},{wch:12}];
+  XLSX.utils.book_append_sheet(wb,ws2,'สรุประดับร้าน');
+  var okS=ids.filter(function(id){return ss[id];}).length;
+  var ws3=XLSX.utils.aoa_to_sheet([['หัวข้อ','จำนวน'],['ร้านปลอมทั้งหมด',ids.length],['ตะกร้าทั้งหมด',allRows.length],['ร้านปิดสำเร็จ',okS],['ร้านยังไม่สำเร็จ',ids.length-okS],['',''],['สร้างเมื่อ',new Date().toLocaleString('th-TH')]]);
+  ws3['!cols']=[{wch:24},{wch:14}]; XLSX.utils.book_append_sheet(wb,ws3,'ภาพรวม');
+  XLSX.writeFile(wb,'FakeShopScan_'+today+'.xlsx');
+  showToast('ดาวน์โหลด Excel สำเร็จ','ok');
+}
+
+// ── TOAST ──────────────────────────────────────────────────
+function showToast(msg, type) {
+  var t=document.getElementById('toast'); t.textContent=msg; t.className='toast show t-'+(type||'ok');
+  setTimeout(function(){t.className='toast';},3500);
+}
+
+// ── INIT ───────────────────────────────────────────────────
+try { var k=localStorage.getItem('fss_key'); if(k) document.getElementById('apiKey').value=k; } catch(e){}
+window.addEventListener('load', function() {
+  initFirebase();
+});
+</script>
+</body>
+</html>
